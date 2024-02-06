@@ -1,0 +1,5 @@
+Requirements:                                                                                                                                                           pyzotero-1.5.18
+tenacity-8.2.3
+bs4-0.0.1
+requests-2.31.0
+copyleaks-4.0.1

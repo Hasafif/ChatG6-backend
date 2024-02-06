@@ -1,0 +1,13 @@
+# ignore ALL .log files
+
+
+# ignore ALL files in ANY directory named temp
+
+info
+**/migrations
+*.log
+*.pot
+*.pyc
+__pycache__
+db.sqlite3
+*.txt
