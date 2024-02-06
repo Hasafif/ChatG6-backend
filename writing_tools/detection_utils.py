@@ -13,8 +13,8 @@ from copyleaks.models.export import *
 
 def authenticate():
     # Copyleaks Account credintials 
-    EMAIL_ADDRESS= 'hassan.n.afif@gmail.com'
-    KEY = '72a3840d-a917-40cd-8f45-3814a4ba7535'
+    EMAIL_ADDRESS= 'your email'
+    KEY = 'Your api-key'
 
     # Authenticating Process
     try:
