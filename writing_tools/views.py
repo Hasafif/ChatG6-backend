@@ -10,23 +10,28 @@ from tenacity import retry, stop_after_attempt, wait_exponential
 @retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=4, max=10))
 def Literature_with_retry(self,request):
      data = JSONParser().parse(request)
+     print(data)
      style = data.get('style', None)
      researches = data.get('Researches', [])
+     subject = data.get('subject', None)
+     print(researches)
      res = []
      for i in researches:
-          r = Research(i['title'],i['authors'],i['pdf_url'],i['published'])
+          r = Research(i['title'],i['authors'],i['pdf_url'],i['abstract'],i['published'])
+          #r = Research(i['title'],i['author'],i['pdfLink'],i['publish_year'])
           res.append(r)
      print(res)
-     lr = Literature_Review(res)
+     lr = Literature_Review(res,subject)
      lr.add_citations(style)
      lr.add_references(style)
      return lr.full_literature_review
 
 class LiteratureView(APIView):
-     ''' req: (researches:list[dict],style:str)
+     ''' req: (researches:list[dict],style:,subject:str)
       list[i]:{'title':,'authors':,'pdf_url':,'published':},
       style: apa,ieee,mla,ama,asa,aaa,apsa,mhra,oscola
-       note: style can not be small letters
+       note: style can not be small 
+       subject:the main title of the literature
       (res,201): literature_review: str '''
      @csrf_exempt
      def post(self, request):
@@ -44,7 +49,7 @@ def document_with_retry(self, request, *args, **kwargs):
      researches = data.get('Researches', [])
      res = []
      for i in researches:
-           r = Research(i['title'],i['authors'],i['pdf_url'],i['published'])
+           r = Research(i['title'],i['authors'],i['pdf_url'],'',i['published'])
            res.append(r)
      ref = documentation(res,style)
      return ref
