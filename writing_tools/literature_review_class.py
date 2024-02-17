@@ -1,3 +1,5 @@
+# https://lukasschwab.me/arxiv.py/arxiv.html
+# https://poe.com/chat/2t4f2epll96yl0li4gn
 import requests
 from tenacity import retry, stop_after_attempt, wait_exponential
 import json
@@ -20,20 +22,6 @@ def zoter_retrieve(zot):
 def zoter_delete(zot,z):
     resp = zot.delete_item(z)
     return resp
-##backoff & retry implementation for askyourpdf requests
-@retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=4, max=10))
-def get_docId_retry(url:str):
-   response = requests.get(
-                'https://api.askyourpdf.com/v1/api/download_pdf',
-               headers=header1,
-               params={'url': url})
-   
-   return response
-@retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=4, max=10))
-def ask_request_retry(data,id):
-      response = requests.post(f'https://api.askyourpdf.com/v1/chat/{id}?model_name=GPT3', 
-            headers=header1, data=json.dumps(data))
-      return response
 ##backoff & retry implementation for gpt requests
 @retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=4, max=10))
 def gpt_request_retry(payload):
@@ -84,26 +72,38 @@ def documentation(References,type):
                 template['creators'][0]['lastName'] = str(entry.authors[0]).split()[1]
           else:
               au = []
-              for h in entry.authors: 
-                 n = {'creatorType': 'author', 'firstName': str(h).split()[0], 'lastName': str(h).split()[1]}
-                 au.append(n)
-              template['creators'] = au
+              for h in entry.authors:
+                 try:
+                    n = {'creatorType': 'author', 'firstName': str(h).split()[0], 'lastName': str(h).split()[1]}
+                    print(n)
+                    au.append(n)
+                 except:
+                      continue
+              try:
+                   template['creators'] = au
+              except Exception as e:
+                   print(e)
+                   itemkeys.append('not there')
+                   continue
+                   
               
           #template['creators']
           #resp = zot.create_items([template])
-          
-          resp = zoter_create(zot,template)
-         
-               
-          
-          itemkeys.append(resp['successful']['0']['key'])
+          try:
+             resp = zoter_create(zot,template)
+             itemkeys.append(resp['successful']['0']['key'])
+             print(resp['successful']['0']['key'])
+          except:
+               itemkeys.append('not there')
+               continue
         
           
-          print(resp['successful']['0']['key'])
+          
       
       for i,entry in enumerate(itemkeys):
         zot.add_parameters(format='json',content= 'bib', itemKey=entry, style = type)
             #z = zot.items()
+        print(zot)
         try:
             z = zoter_retrieve(zot)
             print(z)
@@ -135,12 +135,13 @@ def parse_year(d) -> int:
 # Classes
 #class for all refernces or papers
 class Research:
-   def __init__(self, title:str,authors:list, pdfUrl:str,publish_year:str):
+   def __init__(self, title:str,authors:list, pdfUrl:str,abs:str,publish_year:str):
        self.title = title
        self.author_name = self.parse_author_name(authors)
        self.pdfUrl = pdfUrl 
        self.publish_year = publish_year
        self.authors = authors
+       self.abstract = abs
    def parse_author_name(self,authors:list):
      
      if len(authors) == 1:
@@ -154,17 +155,17 @@ class Research:
 
 ##literature_Review class
 class Literature_Review:
-  def __init__(self,Researches:list[Research]):
+  def __init__(self,Researches:list[Research],subject):
+    self.subject = subject
     self.references = Researches
     self.research_count = len(Researches)
     self.authors = self.process_authors()['auth']
     self.publish_years = [obj.publish_year for obj in Researches]
     self.pdf_urls = [obj.pdfUrl for obj in Researches]
     self.titles = [obj.title for obj in Researches]
-    self.docIds = self.get_docId()
+    self.abstracts = [obj.abstract for obj in Researches]
     self.raw_literature_reviews = self.generate_literature_review()
     self.full_literature_review = self.merge_and_rephrase()
-    self.chosed_authors = self.process_authors()['ca']
     self.isCited = False
     self.isdocumented = False
   ##function to process author names to avoid repeated authors or citation errors
@@ -176,6 +177,7 @@ class Literature_Review:
                    a = entry.author_name
                    if a not in auth:
                            auth.append(a)
+                           chosed_authors.append(i)
           else:
                for i,entry in enumerate(entry.authors):
                     au = str(entry).split()[-1] 
@@ -186,51 +188,21 @@ class Literature_Review:
                          break
                     else:
                          continue
-      a = {'auth':auth,'ca':chosed_authors}
+      a = {'auth':auth}
       return a
-  ##function to send pdf_urls to askyour pdf api and get ids
-  def get_docId(self) -> list:
-    Ids = []
-    for url in self.pdf_urls:
-       print(len(self.pdf_urls))
-       response = get_docId_retry(url)
-       if response.status_code == 201:
-          id = response.json()
-          Id = id['docId']
-          Ids.append(Id)
-       else:
-          Id = 'None'
-          Ids.append(Id)
-          print(f'Error:{response.status_code}')
-          
-    print(Ids)
-    return Ids
   ##function to parse refernces
   def list_researches(self) -> None:
     print(f"Researches Count:{self.research_count} \n")
     for i in range(0,self.research_count):
-      r = f'[{i+1}] Title:{self.titles[i]}\n Authors:{self.authors[i]}\nURLs:{self.pdf_urls[i]}\nDocId:{self.docIds[i]}\nPublish Year:{self.publish_years[i]}\n'
+      r = f'[{i+1}] Title:{self.titles[i]}\n Authors:{self.authors[i]}\nURLs:{self.pdf_urls[i]}\nabstract:{self.abstracts[i]}\nPublish Year:{self.publish_years[i]}\n'
       print(r)
   ##function to summarize each article,then rephrasing via gpt prompts
   def generate_literature_review(self) -> list:
     lR  = []
-    for i in range(0,self.research_count):
+    for i in range(0,len(self.references)):
       a = self.authors[i] 
-      id = self.docIds[i]
-      if id == 'None':
-           continue
-      data = [
-      {
-          "sender": "User",
-          "message": f"complete the following statement in a paragraph format to match the summary of the document:\n 'The study found' or 'The research discovers'  "
-      }
-      ]
-      # AskYourPdf Request
-      response = ask_request_retry(data,id)
-
-      if response.status_code == 200:
-        t = response.json()
-        payload = {
+      t = self.abstracts[i]
+      payload = {
         'model': 'gpt-4',
         'messages': [
               {'role': 'system', 'content': 'You are a helpful assistant.'},
@@ -238,36 +210,41 @@ class Literature_Review:
             ]
         }
         # First GPT-4 Request
-        response = gpt_request_retry(payload)
+      response = gpt_request_retry(payload)
+        #response = requests.post(api_url, headers=header2, json=payload)
+      print(response.json())
         # Parse the response
-        data = response.json()
-        message = data['choices'][0]['message']['content']  
-        #print(message)  
-        lR.append(message)   
-      else:
-          return [f'Error: {response.status_code}']
+      data = response.json()
+      message = data['choices'][0]['message']['content']  
+        
+      print(message)  
+      lR.append(message)   
     return lR
 
   ##function to merge paragraphs,then rephrase in the appropriate way
   def merge_and_rephrase(self) -> str:
     m = '\n'.join(self.raw_literature_reviews)
+    print(m)
     payload = {
               'model': 'gpt-4',
               'messages': [
             {'role': 'system', 'content': 'You are a helpful assistant.'},
-            {'role': 'user', 'content':f'merge and rephrase the following pharagraphs together as a literature review:\n{m} , and also remember to use linking words "While", "However" and "Whereas", between each paragraph'}
+            {'role': 'user', 'content':f'merge and rephrase the following pharagraphs together as a literature review about {self.subject}:\n{m} , and also remember to use linking words "While", "However" and "Whereas", between each paragraph'}
         ]
         }
       # Second GPT-4 request 
     response = gpt_request_retry(payload)
+    print(response.json())
     # Parse the response
     data = response.json()
     message = data['choices'][0]['message']['content']  
+    print(message)
     return message
   ##function to add citations to the literature
   def add_citations(self,citation_type:str):
     # Adding citations to the literature review
     full_lr = self.full_literature_review
+    print(full_lr)
     if not self.isCited:
       self.isCited = True
       for i,entry in enumerate(self.references):
@@ -287,21 +264,19 @@ class Literature_Review:
                       pass
           full_lr = addcitation(message = full_lr,citation=citation,auth_name=auth_name)
       self.full_literature_review = full_lr
+      print(full_lr)
       return full_lr
     else:
       return "This literature review is already cited!"
   ##function to add refernces list to the text 
   def add_references(self,type:str):
     lr = self.full_literature_review
+    print(lr)
     if not self.isdocumented:
       self.isdocumented = True
-      for i,entry in enumerate(self.references):
-              c = self.chosed_authors[i]
-              T = entry.authors[c]
-              entry.authors[c] = entry.authors[0]
-              entry.authors[0] = T
       lr = self.full_literature_review
       ref = documentation(self.references,type)
+      print(ref)
       for r in ref['bib']:
            lr = f'{lr}\n{r}\n'
       self.full_literature_review = lr
