@@ -2,7 +2,7 @@ import random
 import requests
 import json
 import base64
-
+from ath.info import *
 from copyleaks.copyleaks import Copyleaks
 from copyleaks.exceptions.command_error import CommandError
 
@@ -12,9 +12,8 @@ from copyleaks.models.export import *
 
 
 def authenticate():
-    # Copyleaks Account credintials 
-    EMAIL_ADDRESS= 'your email'
-    KEY = 'Your api-key'
+  
+
 
     # Authenticating Process
     try:
