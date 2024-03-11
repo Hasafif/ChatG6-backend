@@ -1,4 +1,5 @@
 from .literature_review_class import *
+from .article_class_v2 import *
 from django.views.decorators.csrf import csrf_exempt
 from rest_framework.parsers import JSONParser
 from rest_framework.response import Response
@@ -84,3 +85,23 @@ class Plagiarism_detector(APIView):
            return Response(status, status=201)
         except Exception as ex:
             return JsonResponse({'detail': str(ex)}, status=500)
+#backoff & retry implementation
+@retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=4, max=10))
+def article_with_retry(self, request, *args, **kwargs):
+     data = JSONParser().parse(request)
+     topic = data.get('topic', None)
+     res = data.get('res', None)
+     print(res)
+     ref = article(topic,res)
+     return ref.final_article
+class Article(APIView):
+    ''' req: (topic:string),
+      (res,201): article: str '''
+    @csrf_exempt
+    def post(self, request, *args, **kwargs):
+              try:
+                  res = article_with_retry(self,request, *args, **kwargs)
+                  return Response(res, status=201)
+                      
+              except Exception as ex:
+                      return JsonResponse({'detail': str(ex)}, status=500)
