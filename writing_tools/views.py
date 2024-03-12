@@ -91,8 +91,10 @@ def article_with_retry(self, request, *args, **kwargs):
      data = JSONParser().parse(request)
      topic = data.get('topic', None)
      res = data.get('res', None)
+     outline = data.get('outline', None)
+     arxiv = data.get('arxiv', None)
      print(res)
-     ref = article(topic,res)
+     ref = article(topic,res,outline,arxiv)
      return ref.final_article
 class Article(APIView):
     ''' req: (topic:string),
@@ -103,5 +105,24 @@ class Article(APIView):
                   res = article_with_retry(self,request, *args, **kwargs)
                   return Response(res, status=201)
                       
+              except Exception as ex:
+                      return JsonResponse({'detail': str(ex)}, status=500)
+#backoff & retry implementation
+@retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=4, max=10))
+def outline_with_retry(self, request, *args, **kwargs):
+     data = JSONParser().parse(request)
+     topic = data.get('topic', None)
+     res = data.get('res', None)
+     print(res)
+     ref = outline(topic,res)
+     return ref
+class Outline(APIView):
+    ''' req: (topic:string),
+      (res,201): article: str '''
+    @csrf_exempt
+    def post(self, request, *args, **kwargs):
+              try:
+                  res = outline_with_retry(self,request, *args, **kwargs)
+                  return Response(res, status=201)
               except Exception as ex:
                       return JsonResponse({'detail': str(ex)}, status=500)
