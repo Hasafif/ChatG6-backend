@@ -97,7 +97,7 @@ def article_with_retry(self, request, *args, **kwargs):
      ref = article(topic,res,outline,arxiv)
      return ref.final_article
 class Article(APIView):
-    ''' req: (topic:string),
+    ''' req: (topic:string,res:list[dict],outline:string,arxiv:boolean),
       (res,201): article: str '''
     @csrf_exempt
     def post(self, request, *args, **kwargs):
@@ -117,12 +117,31 @@ def outline_with_retry(self, request, *args, **kwargs):
      ref = outline(topic,res)
      return ref
 class Outline(APIView):
-    ''' req: (topic:string),
-      (res,201): article: str '''
+    ''' req: (topic:string,res:list[dict]),
+      (res,201): outline: str '''
     @csrf_exempt
     def post(self, request, *args, **kwargs):
               try:
                   res = outline_with_retry(self,request, *args, **kwargs)
+                  return Response(res, status=201)
+              except Exception as ex:
+                      return JsonResponse({'detail': str(ex)}, status=500)
+#backoff & retry implementation
+@retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=4, max=10))
+def complete_with_retry(self, request, *args, **kwargs):
+     data = JSONParser().parse(request)
+     statement = data.get('statement', None)
+     print(statement)
+     ref = AutoComplete(statement)
+     print(ref)
+     return ref.final
+class Complete(APIView):
+    ''' req: (statement:string,res:list[dict]),
+      (res,201): completed: str '''
+    @csrf_exempt
+    def post(self, request, *args, **kwargs):
+              try:
+                  res = complete_with_retry(self,request, *args, **kwargs)
                   return Response(res, status=201)
               except Exception as ex:
                       return JsonResponse({'detail': str(ex)}, status=500)
