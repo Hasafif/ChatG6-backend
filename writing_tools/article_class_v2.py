@@ -3,7 +3,8 @@ from langchain_core.prompts import ChatPromptTemplate
 from tenacity import retry, stop_after_attempt, wait_exponential
 import arxiv
 from ath.info import *
-
+import re
+from .semantic import *
 OpenAI_key = open_ai_key
 llm = ChatOpenAI(model='gpt-4', api_key=OpenAI_key,temperature=0)
 prompt = ChatPromptTemplate.from_messages([
@@ -11,7 +12,14 @@ prompt = ChatPromptTemplate.from_messages([
     ("user", "{input}")
 ])
 chain = prompt | llm 
-##backoff & retry implementation for gpt requests
+##backoff & retry implementation for generate requests
+@retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=4, max=10))
+def extract(statement):
+     o = chain.invoke({"input": f"Extract the topic of the following statement {statement}"})
+     print(o.content)
+     return o.content
+##backoff & retry implementation for generate requests
+@retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=4, max=10))
 def generate(topic,references,outline):
     if (outline != ''):
          o = chain.invoke({"input": f"generate a well structered scientific article about {topic}.Use the following outline {outline}.Use the following refernces {references}.Add in-text numeric citations with a complete references list"})
@@ -20,6 +28,14 @@ def generate(topic,references,outline):
          o = chain.invoke({"input": f"generate a well structered scientific article about {topic}.Use the following refernces {references}.Add in-text numeric citations with a complete references list"})
          print(o.content)
     return o.content
+##backoff & retry implementation for complete requests
+@retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=4, max=10))
+def complete(statement,references):
+     o = chain.invoke({"input": f"complete the following statement {statement}.Use the following references {references}.Add In-text numeric citation.Add a complete references list"})
+     print(o.content)
+     return o.content
+##backoff & retry implementation for outline requests
+@retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=4, max=10))
 def outline(topic,references):
     refs = []
     if (len(references)==0):
@@ -146,3 +162,50 @@ class article:
 #article("football matches prediction using AI")
 #m = article("organic chemistry")
 #print (m.final_article)
+class AutoComplete:
+    def __init__(self,statement):
+       self.statement = statement
+       self.Topic = self.topic()
+       self.references = self.search()
+       self.completed = self.complete_statement()
+       self.final = self.clean()
+    def topic(self):
+         print('v')
+         #o = chain.invoke({"input": f"Extract the topic of the following statement {self.statement}"})
+         #print(o.content)
+         o = extract(self.statement)
+         print(o)
+         # Regular expression pattern to match the topic
+         pattern = r'"(.*?)"'
+         # Find the topic using the pattern
+         match = re.search(pattern, o)
+         if match:
+              topic = match.group(1)
+              print(f"The extracted topic is: {topic}")
+         else:
+              topic = o
+         return topic
+    def search(self):
+        refs = []
+        try:
+           references = semantic(search_in_semantic(self.Topic))
+           refs = organize(references) 
+        except:
+           references = search_in_arxiv(self.Topic)
+           refs = organize_arxiv(references)  
+        print(refs)  
+        print(references)       
+        ser = []
+        for i in refs:
+             try:
+               ser.append('\n'.join(i))
+             except:
+                  continue
+        der = '\n\n\n'.join(ser)
+        return der
+    def complete_statement(self):
+       out = complete(self.statement,self.references)
+       return out
+    def clean(self):
+       out = self.completed.replace('^', '').replace('#','').replace('*','')
+       return out
